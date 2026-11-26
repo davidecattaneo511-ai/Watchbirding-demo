@@ -5450,19 +5450,6 @@
         const cleanJson = rawTxt.replace(/```json|```/gi, '').trim();
         candidates = JSON.parse(cleanJson);
       }
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || 'Errore API');
-        const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-        candidates = JSON.parse(txt);
-      } else {
-        const res = await fetch(keyOrUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_base64: base64Jpeg })
-        });
-        if (!res.ok) throw new Error('Errore dal proxy iNaturalist');
-        candidates = await res.json();
-      }
 
       renderCandidates(candidates);
     } catch (err) {
