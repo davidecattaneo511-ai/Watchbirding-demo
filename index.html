@@ -5336,7 +5336,7 @@
   resetBtn.onclick = startCamera;
   galleryBtn.onclick = () => fileInput.click();
 
-  function resizeToBase64(source, maxSide = 900) {
+  function resizeToBase64(source, maxSide = 640) {
     const canvas = document.createElement('canvas');
     const w = source.videoWidth || source.naturalWidth;
     const h = source.videoHeight || source.naturalHeight;
@@ -5414,9 +5414,9 @@
     try {
       let candidates = [];
 
-      if (engine === 'gemini') {
+     if (engine === 'gemini') {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000); // max 15 sec
+        const timer = setTimeout(() => controller.abort(), 45000); // 45 secondi
 
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(keyOrUrl)}`,
@@ -5435,8 +5435,7 @@
               }],
               generationConfig: {
                 responseMimeType: 'application/json',
-                temperature: 0.1,
-                thinkingConfig: { thinkingBudget: 0 }
+                temperature: 0.1
               }
             })
           }
