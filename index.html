@@ -531,6 +531,113 @@
       background-color: var(--border);
       border-radius: 9999px;
     }
+
+    /* === WATCHBIRDING CAMERA SCANNER (STILE MINIMAL EDITORIALE) === */
+#wbScanFab {
+  position: fixed; bottom: 20px; right: 20px; z-index: 900;
+  width: 52px; height: 52px; border-radius: 14px;
+  border: 1.5px solid #181817; background: #f6f5f2; color: #181817;
+  box-shadow: 0 4px 14px rgba(24, 24, 23, 0.18);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+#wbScanFab:active { transform: scale(0.95); background: #eae8e3; }
+
+#wbScanModal {
+  position: fixed; inset: 0; z-index: 2000;
+  background: #f6f5f2; color: #181817;
+  display: none; flex-direction: column;
+  font-family: inherit;
+}
+#wbScanModal.open { display: flex; }
+
+.wb-scan-top {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: #f6f5f2; border-bottom: 1px solid rgba(24,24,23,0.14);
+}
+.wb-scan-title {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+}
+.wb-scan-top button {
+  background: #ffffff; color: #181817; border: 1px solid rgba(24,24,23,0.22);
+  border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+#wbScanSettings {
+  display: none; padding: 12px 14px; background: #eceae4;
+  border-bottom: 1px solid rgba(24,24,23,0.14); font-size: 12px;
+}
+#wbScanSettings input, #wbScanSettings select {
+  width: 100%; padding: 8px 10px; margin: 4px 0 8px; border-radius: 8px;
+  border: 1px solid rgba(24,24,23,0.22); background: #ffffff; color: #181817;
+  font-size: 13px; box-sizing: border-box;
+}
+
+/* Viewport quasi a schermo intero */
+.wb-viewport {
+  position: relative; flex: 1; width: 100%; background: #181817;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+#wbVideo, #wbPreviewImg {
+  width: 100%; height: 100%; object-fit: cover;
+}
+#wbPreviewImg { display: none; object-fit: contain; background: #181817; }
+
+/* Griglia fotografica grigia a schermo intero (regola dei terzi + mirino centrale) */
+.wb-grid-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(200, 200, 200, 0.32) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(200, 200, 200, 0.32) 1px, transparent 1px);
+  background-size: 33.333% 33.333%;
+  background-position: -1px -1px;
+}
+.wb-grid-overlay::before {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  width: 44px; height: 44px; transform: translate(-50%, -50%);
+  border: 1.5px solid rgba(220, 220, 220, 0.65); border-radius: 50%;
+}
+.wb-grid-overlay.scanning::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 2px;
+  background: #f6f5f2; box-shadow: 0 0 12px rgba(255,255,255,0.9);
+  animation: wbLaser 1.1s ease-in-out infinite alternate;
+}
+@keyframes wbLaser { from { top: 4%; } to { top: 96%; } }
+
+#wbScanResults {
+  display: none; max-height: 40vh; overflow-y: auto; padding: 12px 14px;
+  background: #f6f5f2; border-top: 1.5px solid #181817;
+}
+.wb-cand {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 8px; border-radius: 10px;
+  background: #ffffff; border: 1px solid rgba(24,24,23,0.18); cursor: pointer;
+}
+.wb-cand:last-child { margin-bottom: 0; }
+.wb-cand-name { font-weight: 700; font-size: 14px; color: #181817; }
+.wb-cand-sci { font-size: 12px; color: #5c5b57; font-style: italic; }
+.wb-cand-note { font-size: 11px; color: #3a3936; margin-top: 3px; }
+.wb-cand-score {
+  font-weight: 700; font-size: 13px; color: #181817;
+  background: #eceae4; padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+}
+
+.wb-scan-controls {
+  display: flex; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: #f6f5f2; border-top: 1px solid rgba(24,24,23,0.14);
+  justify-content: center; align-items: center;
+}
+.wb-btn-shoot {
+  flex: 1; max-width: 240px; padding: 13px 16px; border-radius: 12px;
+  border: 1.5px solid #181817; background: #181817; color: #f6f5f2;
+  font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.wb-btn-sec {
+  padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(24,24,23,0.24);
+  background: #ffffff; color: #181817; font-size: 13px; font-weight: 600; cursor: pointer;
+}
   </style>
   <link rel="manifest" href="./manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1209,6 +1316,67 @@
   >
     Notifica
   </div>
+<!-- Pulsante Fotocamera Vettoriale -->
+<button id="wbScanFab" title="Scansiona specie" aria-label="Scansiona specie">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+</button>
+
+<!-- Modale Mirino BirdDex -->
+<div id="wbScanModal" aria-hidden="true">
+  <div class="wb-scan-top">
+    <span class="wb-scan-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      Scanner BirdDex
+    </span>
+    <div style="display:flex;gap:6px;">
+      <button id="wbScanCfgBtn">Motore</button>
+      <button id="wbScanCloseBtn">Chiudi</button>
+    </div>
+  </div>
+
+  <!-- Selezione Motore e Configurazione -->
+  <div id="wbScanSettings">
+    <label style="font-weight:600;">Motore di riconoscimento</label>
+    <select id="wbEngineSelect">
+      <option value="gemini">Gemini Flash Vision (diretto)</option>
+      <option value="custom">Proxy iNaturalist Computer Vision</option>
+    </select>
+    <label style="font-weight:600;">Chiave API o Endpoint (salvata automaticamente)</label>
+    <input id="wbApiKeyInput" type="password" placeholder="Chiave API Gemini oppure URL Worker iNaturalist">
+    <button id="wbSaveCfgBtn" class="wb-btn-sec" style="width:100%;margin-top:4px;">Salva configurazione</button>
+  </div>
+
+  <!-- Mirino Live quasi a schermo intero con griglia grigia -->
+  <div class="wb-viewport">
+    <video id="wbVideo" autoplay playsinline muted></video>
+    <img id="wbPreviewImg" alt="Anteprima scatto">
+    <div id="wbGrid" class="wb-grid-overlay"></div>
+  </div>
+
+  <!-- Risultati (mostrati solo se confidenza < 85%) -->
+  <div id="wbScanResults"></div>
+
+  <!-- Barra controlli -->
+  <div class="wb-scan-controls">
+    <button id="wbGalleryBtn" class="wb-btn-sec">Galleria</button>
+    <button id="wbShootBtn" class="wb-btn-shoot">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/>
+      </svg>
+      Identifica
+    </button>
+    <button id="wbResetBtn" class="wb-btn-sec" style="display:none;">Nuovo scatto</button>
+    <input id="wbFileInput" type="file" accept="image/*" style="display:none;">
+  </div>
+</div>
+
 
   <!-- ==================== APPLICATION SCRIPT ==================== -->
   <script>
@@ -5075,6 +5243,252 @@
     }
 
     window.addEventListener('DOMContentLoaded', init);
+    /* === MODULO SCANNER FOTOGRAFICO BIRDDEX === */
+(function initWatchBirdingScanner() {
+  // Opzionale: se usi un tuo proxy Cloudflare senza chiave segreta, inserisci qui l'URL:
+  const DEFAULT_PROXY_URL = "";
+
+  const fab = document.getElementById('wbScanFab');
+  const modal = document.getElementById('wbScanModal');
+  const closeBtn = document.getElementById('wbScanCloseBtn');
+  const cfgBtn = document.getElementById('wbScanCfgBtn');
+  const cfgBox = document.getElementById('wbScanSettings');
+  const engineSel = document.getElementById('wbEngineSelect');
+  const apiInput = document.getElementById('wbApiKeyInput');
+  const saveCfgBtn = document.getElementById('wbSaveCfgBtn');
+  const video = document.getElementById('wbVideo');
+  const preview = document.getElementById('wbPreviewImg');
+  const grid = document.getElementById('wbGrid');
+  const resultsBox = document.getElementById('wbScanResults');
+  const shootBtn = document.getElementById('wbShootBtn');
+  const galleryBtn = document.getElementById('wbGalleryBtn');
+  const resetBtn = document.getElementById('wbResetBtn');
+  const fileInput = document.getElementById('wbFileInput');
+
+  let mediaStream = null;
+
+  // Auto-acquisizione chiave da parametro URL (?key=... o ?proxy=...) e pulizia barra indirizzi
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('key')) {
+    localStorage.setItem('wb_scan_engine', 'gemini');
+    localStorage.setItem('wb_scan_key', params.get('key').trim());
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (params.get('proxy')) {
+    localStorage.setItem('wb_scan_engine', 'custom');
+    localStorage.setItem('wb_scan_key', params.get('proxy').trim());
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (!localStorage.getItem('wb_scan_key') && DEFAULT_PROXY_URL) {
+    localStorage.setItem('wb_scan_engine', 'custom');
+    localStorage.setItem('wb_scan_key', DEFAULT_PROXY_URL);
+  }
+
+  engineSel.value = localStorage.getItem('wb_scan_engine') || 'gemini';
+  apiInput.value = localStorage.getItem('wb_scan_key') || '';
+
+  saveCfgBtn.onclick = () => {
+    localStorage.setItem('wb_scan_engine', engineSel.value);
+    localStorage.setItem('wb_scan_key', apiInput.value.trim());
+    cfgBox.style.display = 'none';
+  };
+  cfgBtn.onclick = () => {
+    cfgBox.style.display = cfgBox.style.display === 'block' ? 'none' : 'block';
+  };
+
+  async function startCamera() {
+    stopCamera();
+    preview.style.display = 'none';
+    video.style.display = 'block';
+    resetBtn.style.display = 'none';
+    shootBtn.style.display = 'flex';
+    resultsBox.style.display = 'none';
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false
+      });
+      video.srcObject = mediaStream;
+    } catch (e) {
+      resultsBox.style.display = 'block';
+      resultsBox.innerHTML = `<div style="font-size:12px;">Fotocamera live non disponibile (${e.message}). Usa <b>Galleria</b> per caricare una foto.</div>`;
+    }
+  }
+
+  function stopCamera() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+  }
+
+  fab.onclick = () => {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    if (!localStorage.getItem('wb_scan_key')) cfgBox.style.display = 'block';
+    startCamera();
+  };
+
+  closeBtn.onclick = () => {
+    stopCamera();
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  };
+
+  resetBtn.onclick = startCamera;
+  galleryBtn.onclick = () => fileInput.click();
+
+  function resizeToBase64(source, maxSide = 900) {
+    const canvas = document.createElement('canvas');
+    const w = source.videoWidth || source.naturalWidth;
+    const h = source.videoHeight || source.naturalHeight;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    return { dataUrl, base64: dataUrl.split(',')[1] };
+  }
+
+  shootBtn.onclick = () => {
+    if (!video.videoWidth) return;
+    const { dataUrl, base64 } = resizeToBase64(video);
+    stopCamera();
+    video.style.display = 'none';
+    preview.src = dataUrl;
+    preview.style.display = 'block';
+    shootBtn.style.display = 'none';
+    resetBtn.style.display = 'inline-block';
+    analyzeBirdImage(base64);
+  };
+
+  fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const { dataUrl, base64 } = resizeToBase64(img);
+      stopCamera();
+      video.style.display = 'none';
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+      shootBtn.style.display = 'none';
+      resetBtn.style.display = 'inline-block';
+      analyzeBirdImage(base64);
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+    fileInput.value = '';
+  };
+
+  function findInBirdDex(scientificName) {
+    const target = (scientificName || '').toLowerCase().trim();
+    const catalog = window.SPECIES || window.ALL_SPECIES || window.BIRDDEX || [];
+    return catalog.find(s =>
+      (s.sci || s.scientific || s.scientificName || '').toLowerCase().trim() === target
+    );
+  }
+
+  function openSpeciesInBirdDex(sp) {
+    closeBtn.click();
+    if (typeof window.openSheet === 'function') {
+      window.openSheet(sp.code || sp.id);
+    } else if (typeof window.openDexSheet === 'function') {
+      window.openDexSheet(sp.code || sp.id);
+    }
+  }
+
+  async function analyzeBirdImage(base64Jpeg) {
+    const engine = localStorage.getItem('wb_scan_engine') || 'gemini';
+    const keyOrUrl = (localStorage.getItem('wb_scan_key') || '').trim();
+
+    if (!keyOrUrl) {
+      cfgBox.style.display = 'block';
+      resultsBox.style.display = 'block';
+      resultsBox.innerHTML = `<div style="font-size:12px;">Configura una volta la chiave nel pannello <b>Motore</b> qui sopra (oppure apri l'app con <code>?key=LA_TUA_CHIAVE</code>).</div>`;
+      return;
+    }
+
+    grid.classList.add('scanning');
+    resultsBox.style.display = 'block';
+    resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Scansione specie in corso...</div>`;
+
+    try {
+      let candidates = [];
+
+      if (engine === 'gemini') {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(keyOrUrl)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  {
+                    text: 'Identifica la specie di uccello in questa foto (priorità avifauna europea/italiana). Rispondi SOLO con un array JSON valido di massimo 3 candidati ordinati per probabilità: [{"scientificName":"Genus species","italianName":"Nome italiano","confidence":92,"note":"breve carattere diagnostico visibile"}]. Se non vedi uccelli rispondi [].'
+                  },
+                  { inline_data: { mime_type: 'image/jpeg', data: base64Jpeg } }
+                ]
+              }],
+              generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+            })
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || 'Errore API');
+        const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        candidates = JSON.parse(txt);
+      } else {
+        const res = await fetch(keyOrUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: base64Jpeg })
+        });
+        if (!res.ok) throw new Error('Errore dal proxy iNaturalist');
+        candidates = await res.json();
+      }
+
+      renderCandidates(candidates);
+    } catch (err) {
+      resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;">Errore scansione: ${err.message}</div>`;
+    } finally {
+      grid.classList.remove('scanning');
+    }
+  }
+
+  function renderCandidates(list) {
+    if (!Array.isArray(list) || !list.length) {
+      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato con chiarezza. Avvicinati o prova con un altro scatto.</div>`;
+      return;
+    }
+
+    // Apertura automatica obbligatoria se confidenza >= 85%
+    const topMatch = findInBirdDex(list[0].scientificName);
+    if (topMatch && Number(list[0].confidence) >= 85) {
+      openSpeciesInBirdDex(topMatch);
+      return;
+    }
+
+    resultsBox.innerHTML = '';
+    list.slice(0, 3).forEach(item => {
+      const sp = findInBirdDex(item.scientificName);
+      const card = document.createElement('div');
+      card.className = 'wb-cand';
+      card.innerHTML = `
+        <div>
+          <div class="wb-cand-name">${sp ? (sp.it || sp.name) : (item.italianName || item.scientificName)}</div>
+          <div class="wb-cand-sci">${item.scientificName}</div>
+          ${item.note ? `<div class="wb-cand-note">${item.note}</div>` : ''}
+        </div>
+        <div class="wb-cand-score">${Math.round(item.confidence || 0)}%</div>
+      `;
+      card.onclick = () => {
+        if (sp) openSpeciesInBirdDex(sp);
+        else alert(`${item.italianName || item.scientificName} non è presente nel BirdDex.`);
+      };
+      resultsBox.appendChild(card);
+    });
+  }
+})();
   </script>
   <script>
   if ('serviceWorker' in navigator) {
