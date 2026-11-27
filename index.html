@@ -5250,7 +5250,8 @@
     /* === MODULO SCANNER FOTOGRAFICO BIRDDEX === */
 /* === MOTORE NEURALE LOCALE STILE MERLIN (TF.JS INAT-BIRDS V1) === */
 /* === MOTORE NEURALE LOCALE ONNX STILE MERLIN (ZERO CORS, 100% OFFLINE) === */
-(function initOnnxBirdScanner() {
+/* === MOTORE IBRIDO WATCHBIRDING: GEMINI FLASH-LITE (~1s) + ONNX OFFLINE FILTRATO === */
+(function initHybridBirdScanner() {
   const fab = document.getElementById('wbScanFab');
   const modal = document.getElementById('wbScanModal');
   const closeBtn = document.getElementById('wbScanCloseBtn');
@@ -5265,9 +5266,7 @@
   const resetBtn = document.getElementById('wbResetBtn');
   const fileInput = document.getElementById('wbFileInput');
 
-  if (cfgBtn) cfgBtn.style.display = 'none';
-  if (cfgBox) cfgBox.style.display = 'none';
-
+  const KEY_STORAGE = 'wb_gemini_api_key';
   const MODEL_URL = './model/bird-classifier.onnx';
   const LABELS_URL = './model/bird-classifier-labels.json';
 
@@ -5276,61 +5275,53 @@
   let loadPromise = null;
   let mediaStream = null;
 
+  // Pannello impostazioni compatto per salvare la API Key una volta sola
+  if (cfgBtn) cfgBtn.style.display = 'inline-block';
+  if (cfgBox) {
+    cfgBox.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;padding:10px 14px;font-size:12px;background:#efeee9;border-bottom:1px solid rgba(24,24,23,.14);">
+        <div style="font-weight:700;">Motore Ibrido (Online ~1s + Offline ONNX)</div>
+        <div style="display:flex;gap:6px;">
+          <input id="wbApiKeyInput" type="password" placeholder="Incolla Gemini API Key..." value="${localStorage.getItem(KEY_STORAGE) || ''}"
+            style="flex:1;padding:6px 8px;border:1px solid rgba(24,24,23,.25);border-radius:6px;background:#fff;font-size:12px;" />
+          <button id="wbSaveKeyBtn" style="padding:6px 12px;border-radius:6px;background:#181817;color:#fff;font-weight:600;border:none;cursor:pointer;">Salva</button>
+        </div>
+        <div id="wbKeyStatus" style="font-size:11px;opacity:.75;">
+          ${localStorage.getItem(KEY_STORAGE) ? 'Chiave salvata: usa AI Online (~1s) e ONNX se offline.' : 'Senza chiave: usa solo ONNX locale offline.'}
+        </div>
+      </div>
+    `;
+    cfgBox.style.display = 'none';
+    const saveBtn = cfgBox.querySelector('#wbSaveKeyBtn');
+    const keyInput = cfgBox.querySelector('#wbApiKeyInput');
+    const keyStatus = cfgBox.querySelector('#wbKeyStatus');
+    if (saveBtn && keyInput) {
+      saveBtn.onclick = () => {
+        const val = keyInput.value.trim();
+        if (val) {
+          localStorage.setItem(KEY_STORAGE, val);
+          keyStatus.textContent = 'Chiave salvata! Modalità AI Online attiva.';
+        } else {
+          localStorage.removeItem(KEY_STORAGE);
+          keyStatus.textContent = 'Chiave rimossa: modalità solo ONNX offline.';
+        }
+        setTimeout(() => { cfgBox.style.display = 'none'; }, 700);
+      };
+    }
+  }
+
+  if (cfgBtn && cfgBox) {
+    cfgBtn.onclick = () => {
+      cfgBox.style.display = cfgBox.style.display === 'none' ? 'block' : 'none';
+    };
+  }
+
   function normStr(s) {
     return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   }
 
-  // Estrae la lista ordinata dei nomi scientifici indipendentemente dal formato del JSON
-  function parseLabelsJson(raw) {
-    const map = new Map();
-    if (Array.isArray(raw)) {
-      raw.forEach((entry, idx) => {
-        if (typeof entry === 'string') map.set(idx, entry);
-        else if (entry && typeof entry === 'object') {
-          const i = entry.id ?? entry.index ?? idx;
-          const name = entry.name || entry.label || entry.scientificName || '';
-          map.set(Number(i), name);
-        }
-      });
-    } else if (raw && typeof raw === 'object') {
-      const obj = raw.labels || raw.id2label || raw;
-      Object.entries(obj).forEach(([k, v]) => map.set(Number(k), String(v)));
-    }
-    return map;
-  }
-
-  async function ensureModelLoaded() {
-    if (ortSession && birdLabels) return;
-    if (loadPromise) return loadPromise;
-
-    loadPromise = (async () => {
-      if (typeof ort === 'undefined') throw new Error('ONNX Runtime non caricato.');
-
-      // Configurazione ottimale per Safari iOS (niente SharedArrayBuffer richiesto)
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.simd = false;
-      ort.env.wasm.proxy = false;
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-
-      const [session, labelsRaw] = await Promise.all([
-        ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] }),
-        fetch(LABELS_URL).then(r => {
-          if (!r.ok) throw new Error(`File etichette mancante (HTTP ${r.status})`);
-          return r.json();
-        })
-      ]);
-
-      ortSession = session;
-      birdLabels = parseLabelsJson(labelsRaw);
-    })();
-
-    return loadPromise;
-  }
-
-  // Cerca la specie nelle mappe native di WatchBirding (DEX_BY_SCI e ALL_EMBEDDED_DEX)
   function findInBirdDex(scientificName) {
-    // Rimuove eventuali nomi comuni tra parentesi es. "Anas platyrhynchos (Mallard)"
-    const cleaned = (scientificName || '').split('(')[0].trim();
+    const cleaned = (scientificName || '').split('(')[0].replace(/[^a-zA-Z\s-]/g, '').trim();
     const targetSci = normStr(cleaned);
     const targetBinomial = targetSci.split(/\s+/).slice(0, 2).join(' ');
     if (!targetBinomial || targetBinomial === 'background') return null;
@@ -5350,111 +5341,100 @@
     }) || null;
   }
 
-// Apre direttamente la scheda BirdDex nativa di WatchBirding
   function openSpeciesInBirdDex(sp) {
     closeBtn.click();
     if (!sp || !sp.code) return;
-
     if (typeof openStickerSheet === 'function') {
       openStickerSheet(sp.code, 'dex');
     }
   }
-  async function startCamera() {
-    stopCamera();
-    preview.style.display = 'none';
-    video.style.display = 'block';
-    resetBtn.style.display = 'none';
-    shootBtn.style.display = 'flex';
-    resultsBox.style.display = 'none';
 
-   
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } },
-        audio: false
-      });
-      video.srcObject = mediaStream;
-    } catch (e) {
-      resultsBox.style.display = 'block';
-      resultsBox.innerHTML = `<div style="font-size:12px;">Fotocamera non disponibile (${e.message}). Usa <b>Galleria</b>.</div>`;
-    }
-  }
+  // --- MOTORE 1: GEMINI FLASH-LITE (~1 secondo, tutte le 584 specie) ---
+  async function classifyWithGemini(base64Jpeg, apiKey) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const prompt =
+      'Identify the bird in this photo (European/Italian avifauna context). ' +
+      'Reply ONLY with up to 3 lines in exact format: Scientific name|confidence_percent\n' +
+      'Example:\nErithacus rubecula|95\nPhoenicurus ochruros|4\n' +
+      'No extra text, no markdown, no explanations. If no bird is visible, reply: NONE';
 
-  function stopCamera() {
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(t => t.stop());
-      mediaStream = null;
-    }
-  }
-
-  fab.onclick = () => {
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    startCamera();
-  };
-
-  closeBtn.onclick = () => {
-    stopCamera();
-    modal.classList.remove('open');
-    modal.setAttribute('aria-hidden', 'true');
-  };
-
-  resetBtn.onclick = startCamera;
-  galleryBtn.onclick = () => fileInput.click();
-
-  // Ritaglia il quadrato centrale del mirino a 224x224 px
-  function captureCenterCrop(source) {
-    const w = source.videoWidth || source.naturalWidth;
-    const h = source.videoHeight || source.naturalHeight;
-    const side = Math.min(w, h);
-    const sx = Math.round((w - side) / 2);
-    const sy = Math.round((h - side) / 2);
-
-    const previewCanvas = document.createElement('canvas');
-    previewCanvas.width = 480;
-    previewCanvas.height = 480;
-    previewCanvas.getContext('2d').drawImage(source, sx, sy, side, side, 0, 0, 480, 480);
-
-    const modelCanvas = document.createElement('canvas');
-    modelCanvas.width = 224;
-    modelCanvas.height = 224;
-    modelCanvas.getContext('2d').drawImage(source, sx, sy, side, side, 0, 0, 224, 224);
-
-    return { previewUrl: previewCanvas.toDataURL('image/jpeg', 0.85), modelCanvas };
-  }
-
-  shootBtn.onclick = () => {
-    if (!video.videoWidth) return;
-    const { previewUrl, modelCanvas } = captureCenterCrop(video);
-    stopCamera();
-    video.style.display = 'none';
-    preview.src = previewUrl;
-    preview.style.display = 'block';
-    shootBtn.style.display = 'none';
-    resetBtn.style.display = 'inline-block';
-    classifyLocalOnnx(modelCanvas);
-  };
-
-  fileInput.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const img = new Image();
-    img.onload = () => {
-      const { previewUrl, modelCanvas } = captureCenterCrop(img);
-      stopCamera();
-      video.style.display = 'none';
-      preview.src = previewUrl;
-      preview.style.display = 'block';
-      shootBtn.style.display = 'none';
-      resetBtn.style.display = 'inline-block';
-      classifyLocalOnnx(modelCanvas);
-      URL.revokeObjectURL(img.src);
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 60
+      }
     };
-    img.src = URL.createObjectURL(file);
-    fileInput.value = '';
-  };
 
-  // Softmax di sicurezza nel caso l'output del modello siano logits grezzi
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!rawText || rawText.trim().toUpperCase() === 'NONE') return [];
+
+    const candidates = [];
+    rawText.split(/\r?\n/).forEach(line => {
+      const parts = line.split('|');
+      if (parts.length >= 2) {
+        const sci = parts[0].replace(/^[\d.\-\*\s]+/, '').trim();
+        const conf = Math.min(99, Math.max(1, parseInt(parts[1].replace(/[^\d]/g, ''), 10) || 0));
+        if (sci && conf > 0) candidates.push({ scientificName: sci, confidence: conf });
+      }
+    });
+    return candidates.slice(0, 3);
+  }
+
+  // --- MOTORE 2: ONNX LOCALE OFFLINE (filtrato SOLO sulle 584 specie BirdDex) ---
+  function parseLabelsJson(raw) {
+    const map = new Map();
+    if (Array.isArray(raw)) {
+      raw.forEach((entry, idx) => {
+        if (typeof entry === 'string') map.set(idx, entry);
+        else if (entry && typeof entry === 'object') {
+          map.set(Number(entry.id ?? entry.index ?? idx), entry.name || entry.label || entry.scientificName || '');
+        }
+      });
+    } else if (raw && typeof raw === 'object') {
+      Object.entries(raw.labels || raw.id2label || raw).forEach(([k, v]) => map.set(Number(k), String(v)));
+    }
+    return map;
+  }
+
+  async function ensureOnnxLoaded() {
+    if (ortSession && birdLabels) return;
+    if (loadPromise) return loadPromise;
+
+    loadPromise = (async () => {
+      if (typeof ort === 'undefined') throw new Error('ONNX Runtime non caricato.');
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.simd = false;
+      ort.env.wasm.proxy = false;
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+
+      const [session, labelsRaw] = await Promise.all([
+        ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] }),
+        fetch(LABELS_URL).then(r => {
+          if (!r.ok) throw new Error(`Etichette mancanti (HTTP ${r.status})`);
+          return r.json();
+        })
+      ]);
+      ortSession = session;
+      birdLabels = parseLabelsJson(labelsRaw);
+    })();
+
+    return loadPromise;
+  }
+
   function toProbabilities(arr) {
     let min = Infinity, sum = 0;
     for (let i = 0; i < arr.length; i++) {
@@ -5474,54 +5454,77 @@
     return exps;
   }
 
-  async function classifyLocalOnnx(canvas224) {
+  async function classifyWithOnnx(canvas224) {
+    await ensureOnnxLoaded();
+    const rgba = canvas224.getContext('2d').getImageData(0, 0, 224, 224).data;
+    const inputData = new Float32Array(1 * 224 * 224 * 3);
+    for (let i = 0, j = 0; i < rgba.length; i += 4) {
+      inputData[j++] = rgba[i] / 255.0;
+      inputData[j++] = rgba[i + 1] / 255.0;
+      inputData[j++] = rgba[i + 2] / 255.0;
+    }
+
+    const tensor = new ort.Tensor('float32', inputData, [1, 224, 224, 3]);
+    const results = await ortSession.run({ [ortSession.inputNames[0]]: tensor });
+    const probs = toProbabilities(results[ortSession.outputNames[0]].data);
+
+    // Filtra SOLO le specie presenti nel tuo BirdDex (584 specie italiane)
+    const dexMatches = [];
+    for (let i = 1; i < probs.length; i++) {
+      if (probs[i] > 0.005) {
+        const sci = birdLabels.get(i);
+        if (sci && findInBirdDex(sci)) {
+          dexMatches.push({ scientificName: sci, score: probs[i] });
+        }
+      }
+    }
+    dexMatches.sort((a, b) => b.score - a.score);
+    return dexMatches.slice(0, 3).map(m => ({
+      scientificName: m.scientificName,
+      confidence: Math.min(99, Math.round(m.score * 100))
+    }));
+  }
+
+  // --- ORCHESTRATORE IBRIDO ---
+  async function runHybridIdentification(apiBase64, canvas224) {
     grid.classList.add('scanning');
     resultsBox.style.display = 'block';
-    resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">${ortSession ? 'Analisi neurale locale...' : 'Caricamento modello locale (solo la prima volta)...'}</div>`;
+
+    const apiKey = (localStorage.getItem(KEY_STORAGE) || '').trim();
+    const canUseOnline = navigator.onLine && apiKey.length > 10;
+    const t0 = performance.now();
+
+    if (canUseOnline) {
+      resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Riconoscimento AI rapido...</div>`;
+      try {
+        const list = await classifyWithGemini(apiBase64, apiKey);
+        const ms = Math.round(performance.now() - t0);
+        renderCandidates(list, ms, 'AI Online');
+        grid.classList.remove('scanning');
+        return;
+      } catch (err) {
+        console.warn('Fallback su ONNX offline:', err.message);
+        resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Rete non disponibile, passo al motore offline...</div>`;
+      }
+    } else {
+      resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Analisi offline (ONNX)...</div>`;
+    }
 
     try {
-      await ensureModelLoaded();
-      const t0 = performance.now();
-
-      // Prepara il tensore NHWC [1, 224, 224, 3] normalizzato x / 255
-      const rgba = canvas224.getContext('2d').getImageData(0, 0, 224, 224).data;
-      const inputData = new Float32Array(1 * 224 * 224 * 3);
-      for (let i = 0, j = 0; i < rgba.length; i += 4) {
-        inputData[j++] = rgba[i] / 255.0;
-        inputData[j++] = rgba[i + 1] / 255.0;
-        inputData[j++] = rgba[i + 2] / 255.0;
-      }
-
-      const inputName = ortSession.inputNames[0];
-      const outputName = ortSession.outputNames[0];
-      const tensor = new ort.Tensor('float32', inputData, [1, 224, 224, 3]);
-      const results = await ortSession.run({ [inputName]: tensor });
-      const probs = toProbabilities(results[outputName].data);
-
-      // Top 3 escludendo la classe 0 (background)
-      const indexed = [];
-      for (let i = 1; i < probs.length; i++) {
-        if (probs[i] > 0.02) indexed.push({ idx: i, score: probs[i] });
-      }
-      indexed.sort((a, b) => b.score - a.score);
-
-      const ms = Math.round(performance.now() - t0);
-      const candidates = indexed.slice(0, 3).map(item => ({
-        scientificName: birdLabels.get(item.idx) || `Specie #${item.idx}`,
-        confidence: Math.round(item.score * 100)
-      }));
-
-      renderCandidates(candidates, ms);
+      const tOnnx = performance.now();
+      const list = await classifyWithOnnx(canvas224);
+      const ms = Math.round(performance.now() - tOnnx);
+      renderCandidates(list, ms, 'ONNX Offline (584 IT)');
     } catch (err) {
-      resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;"><b>Errore ONNX:</b> ${err.message}</div>`;
+      resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;"><b>Errore scanner:</b> ${err.message}</div>`;
     } finally {
       grid.classList.remove('scanning');
     }
   }
 
-  function renderCandidates(list, ms) {
+  function renderCandidates(list, ms, engineLabel) {
     if (!list.length) {
-      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato (${ms} ms). Centra il soggetto nel mirino e riprova.</div>`;
+      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato (${engineLabel}, ${ms} ms). Centra il soggetto e riprova.</div>`;
       return;
     }
 
@@ -5531,7 +5534,7 @@
       return;
     }
 
-    resultsBox.innerHTML = `<div style="font-size:10px;opacity:.65;margin-bottom:6px;">Analisi locale: ${ms} ms</div>`;
+    resultsBox.innerHTML = `<div style="font-size:10px;opacity:.65;margin-bottom:6px;">${engineLabel} · ${ms} ms</div>`;
     list.forEach(item => {
       const sp = findInBirdDex(item.scientificName);
       const card = document.createElement('div');
@@ -5545,12 +5548,107 @@
       `;
       card.onclick = () => {
         if (sp) openSpeciesInBirdDex(sp);
-        else alert(`"${item.scientificName}" non è presente tra le 584 specie italiane del BirdDex.`);
+        else alert(`"${item.scientificName}" non è tra le 584 specie italiane del BirdDex.`);
       };
       resultsBox.appendChild(card);
     });
   }
-})();;
+
+  // --- FOTOCAMERA & RITAGLIO ---
+  async function startCamera() {
+    stopCamera();
+    preview.style.display = 'none';
+    video.style.display = 'block';
+    resetBtn.style.display = 'none';
+    shootBtn.style.display = 'flex';
+    resultsBox.style.display = 'none';
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } },
+        audio: false
+      });
+      video.srcObject = mediaStream;
+    } catch (e) {
+      resultsBox.style.display = 'block';
+      resultsBox.innerHTML = `<div style="font-size:12px;">Fotocamera non disponibile (${e.message}). Usa <b>Galleria</b>.</div>`;
+    }
+  }
+
+  function stopCamera() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+  }
+
+  function captureCenterCrop(source) {
+    const w = source.videoWidth || source.naturalWidth;
+    const h = source.videoHeight || source.naturalHeight;
+    const side = Math.min(w, h);
+    const sx = Math.round((w - side) / 2);
+    const sy = Math.round((h - side) / 2);
+
+    const apiCanvas = document.createElement('canvas');
+    apiCanvas.width = 384;
+    apiCanvas.height = 384;
+    apiCanvas.getContext('2d').drawImage(source, sx, sy, side, side, 0, 0, 384, 384);
+    const dataUrl = apiCanvas.toDataURL('image/jpeg', 0.72);
+
+    const onnxCanvas = document.createElement('canvas');
+    onnxCanvas.width = 224;
+    onnxCanvas.height = 224;
+    onnxCanvas.getContext('2d').drawImage(source, sx, sy, side, side, 0, 0, 224, 224);
+
+    return { previewUrl: dataUrl, apiBase64: dataUrl.split(',')[1], onnxCanvas };
+  }
+
+  fab.onclick = () => {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    startCamera();
+  };
+
+  closeBtn.onclick = () => {
+    stopCamera();
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  };
+
+  resetBtn.onclick = startCamera;
+  galleryBtn.onclick = () => fileInput.click();
+
+  shootBtn.onclick = () => {
+    if (!video.videoWidth) return;
+    const { previewUrl, apiBase64, onnxCanvas } = captureCenterCrop(video);
+    stopCamera();
+    video.style.display = 'none';
+    preview.src = previewUrl;
+    preview.style.display = 'block';
+    shootBtn.style.display = 'none';
+    resetBtn.style.display = 'inline-block';
+    runHybridIdentification(apiBase64, onnxCanvas);
+  };
+
+  fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const { previewUrl, apiBase64, onnxCanvas } = captureCenterCrop(img);
+      stopCamera();
+      video.style.display = 'none';
+      preview.src = previewUrl;
+      preview.style.display = 'block';
+      shootBtn.style.display = 'none';
+      resetBtn.style.display = 'inline-block';
+      runHybridIdentification(apiBase64, onnxCanvas);
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+    fileInput.value = '';
+  };
+})();
 </script>
 </body>
 </html>
