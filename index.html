@@ -5349,15 +5349,36 @@
     }
   }
 
-  // --- MOTORE 1: GEMINI FLASH-LITE (~1 secondo, tutte le 584 specie) ---
-  // --- MOTORE 1: GEMINI FLASH-LITE / FLASH (~1s, avifauna europea/italiana) ---
+  // --- MOTORE 1: GEMINI AUTO-DISCOVERY (~1s, avifauna europea/italiana) ---
+  let activeGeminiModel = null;
+
+  async function getActiveGeminiModel(apiKey) {
+    if (activeGeminiModel) return activeGeminiModel;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+    if (!res.ok) throw new Error(`API Key/Modelli HTTP ${res.status}`);
+    const data = await res.json();
+    const valid = (data.models || []).filter(m =>
+      Array.isArray(m.supportedGenerationMethods) &&
+      m.supportedGenerationMethods.includes('generateContent') &&
+      !/tts|image|audio|embedding|aqa/i.test(m.name)
+    );
+    const pick =
+      valid.find(m => /flash-lite/i.test(m.name)) ||
+      valid.find(m => /flash/i.test(m.name)) ||
+      valid.find(m => /gemini/i.test(m.name));
+    if (!pick) throw new Error('Nessun modello Gemini attivo per questa chiave');
+    activeGeminiModel = pick.name.replace(/^models\//, '');
+    return activeGeminiModel;
+  }
+
   async function classifyWithGemini(base64Jpeg, apiKey) {
-    const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+    const modelName = await getActiveGeminiModel(apiKey);
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const prompt =
       'You are an expert European ornithologist. Identify the bird in this photo focusing strictly on Western Palearctic / Italian avifauna. ' +
       'Do NOT guess North American lookalikes unless unmistakable. ' +
       'Reply ONLY with up to 3 lines in exact format: Scientific name|confidence_percent\n' +
-      'Example:\nErithacus rubecula|96\nPhoenicurus ochruros|3\n' +
+      'Example:\nSpatula clypeata|96\nAnas platyrhynchos|3\n' +
       'No extra text, no markdown. If no bird is visible, reply: NONE';
 
     const body = {
@@ -5369,106 +5390,40 @@
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 60,
-        thinkingConfig: { thinkingBudget: 0 }
+        maxOutputTokens: 60
       }
     };
 
-    let lastErr = null;
-    for (const modelName of models) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
 
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const errJson = await res.json();
-          if (errJson?.error?.message) detail += ` (${errJson.error.message.slice(0, 60)})`;
-        } catch (_) {}
-        lastErr = new Error(`${modelName}: ${detail}`);
-        continue;
+    if (!res.ok) {
+      activeGeminiModel = null;
+      let detail = `HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error?.message) detail += ` (${errJson.error.message.slice(0, 60)})`;
+      } catch (_) {}
+      throw new Error(`${modelName}: ${detail}`);
+    }
+
+    const data = await res.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!rawText || rawText.trim().toUpperCase() === 'NONE') return { candidates: [], modelName };
+
+    const candidates = [];
+    rawText.split(/\r?\n/).forEach(line => {
+      const parts = line.split('|');
+      if (parts.length >= 2) {
+        const sci = parts[0].replace(/^[\d.\-\*\s]+/, '').trim();
+        const conf = Math.min(99, Math.max(1, parseInt(parts[1].replace(/[^\d]/g, ''), 10) || 0));
+        if (sci && conf > 0) candidates.push({ scientificName: sci, confidence: conf });
       }
-
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!rawText || rawText.trim().toUpperCase() === 'NONE') return { candidates: [], modelName };
-
-      const candidates = [];
-      rawText.split(/\r?\n/).forEach(line => {
-        const parts = line.split('|');
-        if (parts.length >= 2) {
-          const sci = parts[0].replace(/^[\d.\-\*\s]+/, '').trim();
-          const conf = Math.min(99, Math.max(1, parseInt(parts[1].replace(/[^\d]/g, ''), 10) || 0));
-          if (sci && conf > 0) candidates.push({ scientificName: sci, confidence: conf });
-        }
-      });
-      return { candidates: candidates.slice(0, 3), modelName };
-    }
-
-    throw lastErr || new Error('Nessun modello Gemini ha risposto');
-  }
-  // --- MOTORE 2: ONNX LOCALE OFFLINE (filtrato SOLO sulle 584 specie BirdDex) ---
-  function parseLabelsJson(raw) {
-    const map = new Map();
-    if (Array.isArray(raw)) {
-      raw.forEach((entry, idx) => {
-        if (typeof entry === 'string') map.set(idx, entry);
-        else if (entry && typeof entry === 'object') {
-          map.set(Number(entry.id ?? entry.index ?? idx), entry.name || entry.label || entry.scientificName || '');
-        }
-      });
-    } else if (raw && typeof raw === 'object') {
-      Object.entries(raw.labels || raw.id2label || raw).forEach(([k, v]) => map.set(Number(k), String(v)));
-    }
-    return map;
-  }
-
-  async function ensureOnnxLoaded() {
-    if (ortSession && birdLabels) return;
-    if (loadPromise) return loadPromise;
-
-    loadPromise = (async () => {
-      if (typeof ort === 'undefined') throw new Error('ONNX Runtime non caricato.');
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.simd = false;
-      ort.env.wasm.proxy = false;
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-
-      const [session, labelsRaw] = await Promise.all([
-        ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] }),
-        fetch(LABELS_URL).then(r => {
-          if (!r.ok) throw new Error(`Etichette mancanti (HTTP ${r.status})`);
-          return r.json();
-        })
-      ]);
-      ortSession = session;
-      birdLabels = parseLabelsJson(labelsRaw);
-    })();
-
-    return loadPromise;
-  }
-
-  function toProbabilities(arr) {
-    let min = Infinity, sum = 0;
-    for (let i = 0; i < arr.length; i++) {
-      if (arr[i] < min) min = arr[i];
-      sum += arr[i];
-    }
-    if (min >= 0 && sum > 0.95 && sum < 1.05) return arr;
-    let max = -Infinity;
-    for (let i = 0; i < arr.length; i++) if (arr[i] > max) max = arr[i];
-    const exps = new Float32Array(arr.length);
-    let expSum = 0;
-    for (let i = 0; i < arr.length; i++) {
-      exps[i] = Math.exp(arr[i] - max);
-      expSum += exps[i];
-    }
-    for (let i = 0; i < arr.length; i++) exps[i] /= expSum;
-    return exps;
+    });
+    return { candidates: candidates.slice(0, 3), modelName };
   }
 
   async function classifyWithOnnx(canvas224) {
