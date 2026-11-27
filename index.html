@@ -5350,7 +5350,7 @@
   }
 
   // --- MOTORE 1: GEMINI FLASH-LITE (~1 secondo, tutte le 584 specie) ---
-// --- MOTORE 1: GEMINI FLASH-LITE / FLASH (~1s, avifauna europea/italiana) ---
+  // --- MOTORE 1: GEMINI FLASH-LITE / FLASH (~1s, avifauna europea/italiana) ---
   async function classifyWithGemini(base64Jpeg, apiKey) {
     const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     const prompt =
@@ -5411,7 +5411,6 @@
 
     throw lastErr || new Error('Nessun modello Gemini ha risposto');
   }
-
   // --- MOTORE 2: ONNX LOCALE OFFLINE (filtrato SOLO sulle 584 specie BirdDex) ---
   function parseLabelsJson(raw) {
     const map = new Map();
@@ -5504,7 +5503,7 @@
   }
 
   // --- ORCHESTRATORE IBRIDO ---
- // --- ORCHESTRATORE IBRIDO (GEMINI PRIORITARIO + FALLBACK ONNX TRASPARENTE) ---
+// --- ORCHESTRATORE IBRIDO (GEMINI PRIORITARIO + FALLBACK ONNX TRASPARENTE) ---
   async function runHybridIdentification(apiBase64, canvas224) {
     grid.classList.add('scanning');
     resultsBox.style.display = 'block';
@@ -5543,6 +5542,38 @@
     } finally {
       grid.classList.remove('scanning');
     }
+  }
+
+  function renderCandidates(list, ms, engineLabel) {
+    if (!list.length) {
+      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato (${engineLabel}, ${ms} ms). Centra il soggetto e riprova.</div>`;
+      return;
+    }
+
+    const topMatch = findInBirdDex(list[0].scientificName);
+    if (topMatch && list[0].confidence >= 85) {
+      openSpeciesInBirdDex(topMatch);
+      return;
+    }
+
+    resultsBox.innerHTML = `<div style="font-size:10px;opacity:.65;margin-bottom:6px;">${engineLabel} · ${ms} ms</div>`;
+    list.forEach(item => {
+      const sp = findInBirdDex(item.scientificName);
+      const card = document.createElement('div');
+      card.className = 'wb-cand';
+      card.innerHTML = `
+        <div>
+          <div class="wb-cand-name">${sp ? sp.it : item.scientificName} ${sp ? '✓' : ''}</div>
+          <div class="wb-cand-sci">${item.scientificName}${!sp ? ' (fuori catalogo 584)' : ''}</div>
+        </div>
+        <div class="wb-cand-score">${item.confidence}%</div>
+      `;
+      card.onclick = () => {
+        if (sp) openSpeciesInBirdDex(sp);
+        else alert(`"${item.scientificName}" non è tra le 584 specie italiane del BirdDex.`);
+      };
+      resultsBox.appendChild(card);
+    });
   }
 
   // --- FOTOCAMERA & RITAGLIO ---
