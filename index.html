@@ -5274,6 +5274,21 @@
   let birdLabels = null;
   let loadPromise = null;
   let mediaStream = null;
+  const scanOpenSfx = new Audio('./audio/pokedex-open.mp3');
+  scanOpenSfx.preload = 'auto';
+  scanOpenSfx.volume = 0.85;
+  let sfxUnlocked = false;
+
+  function unlockScanSfx() {
+    if (sfxUnlocked) return;
+    scanOpenSfx.muted = true;
+    scanOpenSfx.play().then(() => {
+      scanOpenSfx.pause();
+      scanOpenSfx.currentTime = 0;
+      scanOpenSfx.muted = false;
+      sfxUnlocked = true;
+    }).catch(() => {});
+  }
 
   // Pannello impostazioni compatto per salvare la API Key una volta sola
   if (cfgBtn) cfgBtn.style.display = 'inline-block';
@@ -5344,11 +5359,18 @@
   function openSpeciesInBirdDex(sp) {
     closeBtn.click();
     if (!sp || !sp.code) return;
+
+    // Fa partire il sound effect di apertura Pokédex
+    try {
+      scanOpenSfx.currentTime = 0;
+      scanOpenSfx.play().catch(() => {});
+    } catch (_) {}
+
     if (typeof openStickerSheet === 'function') {
-      openStickerSheet(sp.code, 'dex');
+      // Se il jingle si sovrappone alla voce, alza 0 a 1000 (ms)
+      setTimeout(() => openStickerSheet(sp.code, 'dex'), 0);
     }
   }
-
   // --- MOTORE 1: GEMINI AUTO-DISCOVERY (~1s, avifauna europea/italiana) ---
   let activeGeminiModel = null;
 
@@ -5593,9 +5615,10 @@
   };
 
   resetBtn.onclick = startCamera;
-  galleryBtn.onclick = () => fileInput.click();
+  galleryBtn.onclick = () => { unlockScanSfx(); fileInput.click(); };
 
   shootBtn.onclick = () => {
+    unlockScanSfx();
     if (!video.videoWidth) return;
     const { previewUrl, apiBase64, onnxCanvas } = captureCenterCrop(video);
     stopCamera();
