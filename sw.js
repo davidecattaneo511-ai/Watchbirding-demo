@@ -34,8 +34,10 @@ self.addEventListener('fetch', (event) => {
   const isStickerCdn =
     url.hostname.includes('jsdelivr.net') ||
     url.hostname.includes('everybird') ||
-    url.hostname.includes('birdalbum');
-
+    url.hostname.includes('birdalbum') ||
+    url.hostname.includes('tfhub.dev') ||
+    url.hostname.includes('gstatic.com') ||
+    url.hostname.includes('kaggle.com');
   if (!isSameOrigin && !isStickerCdn) return;
 
   event.respondWith(
