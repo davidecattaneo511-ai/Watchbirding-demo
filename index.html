@@ -5350,13 +5350,15 @@
   }
 
   // --- MOTORE 1: GEMINI FLASH-LITE (~1 secondo, tutte le 584 specie) ---
+// --- MOTORE 1: GEMINI FLASH-LITE / FLASH (~1s, avifauna europea/italiana) ---
   async function classifyWithGemini(base64Jpeg, apiKey) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     const prompt =
-      'Identify the bird in this photo (European/Italian avifauna context). ' +
+      'You are an expert European ornithologist. Identify the bird in this photo focusing strictly on Western Palearctic / Italian avifauna. ' +
+      'Do NOT guess North American lookalikes unless unmistakable. ' +
       'Reply ONLY with up to 3 lines in exact format: Scientific name|confidence_percent\n' +
-      'Example:\nErithacus rubecula|95\nPhoenicurus ochruros|4\n' +
-      'No extra text, no markdown, no explanations. If no bird is visible, reply: NONE';
+      'Example:\nErithacus rubecula|96\nPhoenicurus ochruros|3\n' +
+      'No extra text, no markdown. If no bird is visible, reply: NONE';
 
     const body = {
       contents: [{
@@ -5367,31 +5369,47 @@
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 60
+        maxOutputTokens: 60,
+        thinkingConfig: { thinkingBudget: 0 }
       }
     };
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    let lastErr = null;
+    for (const modelName of models) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!rawText || rawText.trim().toUpperCase() === 'NONE') return [];
-
-    const candidates = [];
-    rawText.split(/\r?\n/).forEach(line => {
-      const parts = line.split('|');
-      if (parts.length >= 2) {
-        const sci = parts[0].replace(/^[\d.\-\*\s]+/, '').trim();
-        const conf = Math.min(99, Math.max(1, parseInt(parts[1].replace(/[^\d]/g, ''), 10) || 0));
-        if (sci && conf > 0) candidates.push({ scientificName: sci, confidence: conf });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error?.message) detail += ` (${errJson.error.message.slice(0, 60)})`;
+        } catch (_) {}
+        lastErr = new Error(`${modelName}: ${detail}`);
+        continue;
       }
-    });
-    return candidates.slice(0, 3);
+
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!rawText || rawText.trim().toUpperCase() === 'NONE') return { candidates: [], modelName };
+
+      const candidates = [];
+      rawText.split(/\r?\n/).forEach(line => {
+        const parts = line.split('|');
+        if (parts.length >= 2) {
+          const sci = parts[0].replace(/^[\d.\-\*\s]+/, '').trim();
+          const conf = Math.min(99, Math.max(1, parseInt(parts[1].replace(/[^\d]/g, ''), 10) || 0));
+          if (sci && conf > 0) candidates.push({ scientificName: sci, confidence: conf });
+        }
+      });
+      return { candidates: candidates.slice(0, 3), modelName };
+    }
+
+    throw lastErr || new Error('Nessun modello Gemini ha risposto');
   }
 
   // --- MOTORE 2: ONNX LOCALE OFFLINE (filtrato SOLO sulle 584 specie BirdDex) ---
@@ -5486,72 +5504,45 @@
   }
 
   // --- ORCHESTRATORE IBRIDO ---
+ // --- ORCHESTRATORE IBRIDO (GEMINI PRIORITARIO + FALLBACK ONNX TRASPARENTE) ---
   async function runHybridIdentification(apiBase64, canvas224) {
     grid.classList.add('scanning');
     resultsBox.style.display = 'block';
 
     const apiKey = (localStorage.getItem(KEY_STORAGE) || '').trim();
-    const canUseOnline = navigator.onLine && apiKey.length > 10;
     const t0 = performance.now();
+    let fallbackReason = '';
 
-    if (canUseOnline) {
-      resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Riconoscimento AI rapido...</div>`;
+    if (navigator.onLine && apiKey.length > 10) {
+      resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Riconoscimento Gemini (avifauna IT/EU)...</div>`;
       try {
-        const list = await classifyWithGemini(apiBase64, apiKey);
+        const { candidates, modelName } = await classifyWithGemini(apiBase64, apiKey);
         const ms = Math.round(performance.now() - t0);
-        renderCandidates(list, ms, 'AI Online');
+        renderCandidates(candidates, ms, `Gemini (${modelName})`);
         grid.classList.remove('scanning');
         return;
       } catch (err) {
-        console.warn('Fallback su ONNX offline:', err.message);
-        resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Rete non disponibile, passo al motore offline...</div>`;
+        fallbackReason = err.message;
+        console.warn('Gemini fallito, passo a ONNX:', fallbackReason);
       }
+    } else if (!navigator.onLine) {
+      fallbackReason = 'Dispositivo offline';
     } else {
-      resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Analisi offline (ONNX)...</div>`;
+      fallbackReason = 'API Key Gemini non inserita (tocca Impostazioni in alto)';
     }
+
+    resultsBox.innerHTML = `<div style="font-size:11px;color:#8a4b00;margin-bottom:4px;">Fallback offline: ${fallbackReason}</div><div style="font-size:12px;font-weight:600;">Analisi ONNX locale...</div>`;
 
     try {
       const tOnnx = performance.now();
       const list = await classifyWithOnnx(canvas224);
       const ms = Math.round(performance.now() - tOnnx);
-      renderCandidates(list, ms, 'ONNX Offline (584 IT)');
+      renderCandidates(list, ms, `ONNX Offline · ${fallbackReason}`);
     } catch (err) {
       resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;"><b>Errore scanner:</b> ${err.message}</div>`;
     } finally {
       grid.classList.remove('scanning');
     }
-  }
-
-  function renderCandidates(list, ms, engineLabel) {
-    if (!list.length) {
-      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato (${engineLabel}, ${ms} ms). Centra il soggetto e riprova.</div>`;
-      return;
-    }
-
-    const topMatch = findInBirdDex(list[0].scientificName);
-    if (topMatch && list[0].confidence >= 85) {
-      openSpeciesInBirdDex(topMatch);
-      return;
-    }
-
-    resultsBox.innerHTML = `<div style="font-size:10px;opacity:.65;margin-bottom:6px;">${engineLabel} · ${ms} ms</div>`;
-    list.forEach(item => {
-      const sp = findInBirdDex(item.scientificName);
-      const card = document.createElement('div');
-      card.className = 'wb-cand';
-      card.innerHTML = `
-        <div>
-          <div class="wb-cand-name">${sp ? sp.it : item.scientificName} ${sp ? '✓' : ''}</div>
-          <div class="wb-cand-sci">${item.scientificName}${!sp ? ' (fuori catalogo 584)' : ''}</div>
-        </div>
-        <div class="wb-cand-score">${item.confidence}%</div>
-      `;
-      card.onclick = () => {
-        if (sp) openSpeciesInBirdDex(sp);
-        else alert(`"${item.scientificName}" non è tra le 584 specie italiane del BirdDex.`);
-      };
-      resultsBox.appendChild(card);
-    });
   }
 
   // --- FOTOCAMERA & RITAGLIO ---
