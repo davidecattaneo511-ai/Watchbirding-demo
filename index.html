@@ -5350,25 +5350,49 @@
     }) || null;
   }
 
-  // Apre la scheda BirdDex corrispondente
+ // Apre la scheda BirdDex passando prima al tab BirdDex (a prova di crash)
   function openSpeciesInBirdDex(sp) {
     closeBtn.click();
-    if (typeof openSheet === 'function') { openSheet(sp.code); return; }
-    if (typeof openDexSheet === 'function') { openDexSheet(sp.code); return; }
-    if (typeof selectDexSpeciesAt === 'function' && typeof ALL_EMBEDDED_DEX !== 'undefined') {
-      const idx = ALL_EMBEDDED_DEX.findIndex(x => x.code === sp.code);
-      if (idx >= 0) { selectDexSpeciesAt(idx); return; }
-    }
-    const card = document.querySelector(`[data-code="${sp.code}"]`);
-    if (card) { card.click(); return; }
-    const searchInput = document.querySelector('input[type="search"], #dexSearch, #searchInput');
-    if (searchInput) {
-      searchInput.value = sp.it || sp.sci;
-      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!sp) return;
+
+    try {
+      // 1. Se siamo sulla home "Live", clicca prima il pulsante del tab "BirdDex"
+      const dexTabBtn = Array.from(document.querySelectorAll('button, [role="tab"]'))
+        .find(b => b.textContent && b.textContent.trim().toLowerCase() === 'birddex');
+      if (dexTabBtn) dexTabBtn.click();
+
+      // 2. Aspetta 120ms che il BirdDex sia visibile, poi apre la scheda
       setTimeout(() => {
-        const firstCard = document.querySelector(`[data-code="${sp.code}"]`);
-        if (firstCard) firstCard.click();
-      }, 80);
+        try {
+          if (typeof openDexModal === 'function') { openDexModal(sp.code); return; }
+          if (typeof openSpeciesModal === 'function') { openSpeciesModal(sp.code); return; }
+          if (typeof openSheet === 'function') { openSheet(sp.code); return; }
+          if (typeof openDexSheet === 'function') { openDexSheet(sp.code); return; }
+          if (typeof selectDexSpeciesAt === 'function' && typeof ALL_EMBEDDED_DEX !== 'undefined') {
+            const idx = ALL_EMBEDDED_DEX.findIndex(x => x.code === sp.code);
+            if (idx >= 0) { selectDexSpeciesAt(idx); return; }
+          }
+
+          // 3. Fallback: clicca direttamente la card della specie nel BirdDex
+          const card = document.querySelector(`[data-code="${sp.code}"], [data-dex-id="${sp.dexId}"]`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.click();
+            return;
+          }
+
+          // 4. Paracadute finale: scrive il nome nella barra di ricerca del BirdDex
+          const searchInput = document.querySelector('input[type="search"], input[placeholder*="Cerca"], #dexSearch');
+          if (searchInput) {
+            searchInput.value = sp.it || sp.sci;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } catch (err) {
+          console.error('Errore apertura scheda BirdDex:', err);
+        }
+      }, 120);
+    } catch (err) {
+      console.error('Errore cambio tab BirdDex:', err);
     }
   }
 
