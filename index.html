@@ -5308,6 +5308,8 @@
 
       // Configurazione ottimale per Safari iOS (niente SharedArrayBuffer richiesto)
       ort.env.wasm.numThreads = 1;
+      ort.env.wasm.simd = false;
+      ort.env.wasm.proxy = false;
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
 
       const [session, labelsRaw] = await Promise.all([
@@ -5378,12 +5380,10 @@
     shootBtn.style.display = 'flex';
     resultsBox.style.display = 'none';
 
-    // Pre-carica il modello locale in background mentre inquadri
-    ensureModelLoaded().catch(() => {});
-
+   
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } },
         audio: false
       });
       video.srcObject = mediaStream;
