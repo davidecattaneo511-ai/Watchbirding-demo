@@ -1,4 +1,4 @@
-const CACHE_NAME = 'watchbirding-offline-v1';
+const CACHE_NAME = 'watchbirding-offline-v7';
 const CORE_ASSETS = [
   './',
   './index.html',
