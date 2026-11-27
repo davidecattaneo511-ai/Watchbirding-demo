@@ -5395,40 +5395,35 @@
       window.openDexSheet(sp.code || sp.id);
     }
   }
-
-  async function analyzeBirdImage(base64Jpeg) {
+async function analyzeBirdImage(base64Jpeg) {
     const engine = localStorage.getItem('wb_scan_engine') || 'gemini';
     const keyOrUrl = (localStorage.getItem('wb_scan_key') || '').trim();
 
     if (!keyOrUrl) {
       cfgBox.style.display = 'block';
       resultsBox.style.display = 'block';
-      resultsBox.innerHTML = `<div style="font-size:12px;">Configura una volta la chiave nel pannello <b>Motore</b> qui sopra (oppure apri l'app con <code>?key=LA_TUA_CHIAVE</code>).</div>`;
+      resultsBox.innerHTML = `<div style="font-size:12px;">Inserisci la API Key nel pannello <b>Motore</b> qui sopra.</div>`;
       return;
     }
 
     grid.classList.add('scanning');
     resultsBox.style.display = 'block';
-    resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Scansione specie in corso...</div>`;
+    resultsBox.innerHTML = `<div style="font-size:12px;font-weight:600;">Invio foto (${Math.round(base64Jpeg.length * 0.75 / 1024)} KB)...</div>`;
 
     try {
       let candidates = [];
 
-     if (engine === 'gemini') {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 45000); // 45 secondi
-
+      if (engine === 'gemini') {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(keyOrUrl)}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${encodeURIComponent(keyOrUrl)}`,
           {
             method: 'POST',
-            signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{
                 parts: [
                   {
-                    text: 'Identifica la specie di uccello in questa foto (priorità avifauna europea/italiana). Rispondi SOLO con un array JSON valido di massimo 3 candidati ordinati per probabilità: [{"scientificName":"Genus species","italianName":"Nome italiano","confidence":92,"note":"breve carattere diagnostico visibile"}]. Se non vedi uccelli rispondi [].'
+                    text: 'Identifica la specie di uccello in questa immagine (avifauna europea/italiana). Rispondi SOLO con un array JSON valido di massimo 3 candidati: [{"scientificName":"Genus species","italianName":"Nome italiano","confidence":92,"note":"carattere diagnostico"}]. Se non vedi uccelli rispondi [].'
                   },
                   { inline_data: { mime_type: 'image/jpeg', data: base64Jpeg } }
                 ]
@@ -5440,19 +5435,28 @@
             })
           }
         );
-        clearTimeout(timer);
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        if (!res.ok) {
+          throw new Error(`API ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
+        }
 
         const rawTxt = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
         const cleanJson = rawTxt.replace(/```json|```/gi, '').trim();
         candidates = JSON.parse(cleanJson);
+      } else {
+        const res = await fetch(keyOrUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: base64Jpeg })
+        });
+        if (!res.ok) throw new Error(`Proxy HTTP ${res.status}`);
+        candidates = await res.json();
       }
 
       renderCandidates(candidates);
     } catch (err) {
-      resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;">Errore scansione: ${err.message}</div>`;
+      resultsBox.innerHTML = `<div style="color:#b3261e;font-size:12px;word-break:break-word;"><b>Errore:</b> ${err.message}</div>`;
     } finally {
       grid.classList.remove('scanning');
     }
@@ -5460,11 +5464,10 @@
 
   function renderCandidates(list) {
     if (!Array.isArray(list) || !list.length) {
-      resultsBox.innerHTML = `<div style="font-size:12px;">Nessun uccello rilevato con chiarezza. Avvicinati o prova con un altro scatto.</div>`;
+      resultsBox.innerHTML = `<div style="font-size:12px;">L'AI non ha individuato uccelli nell'inquadratura (risposta vuota <code>[]</code>). Prova con una foto più nitida o ravvicinata.</div>`;
       return;
     }
 
-    // Apertura automatica obbligatoria se confidenza >= 85%
     const topMatch = findInBirdDex(list[0].scientificName);
     if (topMatch && Number(list[0].confidence) >= 85) {
       openSpeciesInBirdDex(topMatch);
@@ -5478,7 +5481,7 @@
       card.className = 'wb-cand';
       card.innerHTML = `
         <div>
-          <div class="wb-cand-name">${sp ? (sp.it || sp.name) : (item.italianName || item.scientificName)}</div>
+          <div class="wb-cand-name">${sp ? (sp.it || sp.name) : (item.italianName || item.scientificName)} ${sp ? '✓' : '(non in BirdDex)'}</div>
           <div class="wb-cand-sci">${item.scientificName}</div>
           ${item.note ? `<div class="wb-cand-note">${item.note}</div>` : ''}
         </div>
@@ -5486,7 +5489,7 @@
       `;
       card.onclick = () => {
         if (sp) openSpeciesInBirdDex(sp);
-        else alert(`${item.italianName || item.scientificName} non è presente nel BirdDex.`);
+        else alert(`"${item.scientificName}" non trovato nell'elenco BirdDex.`);
       };
       resultsBox.appendChild(card);
     });
