@@ -5350,52 +5350,44 @@
     }) || null;
   }
 
- // Apre la scheda BirdDex passando prima al tab BirdDex (a prova di crash)
+// Apre direttamente la scheda BirdDex nativa di WatchBirding
   function openSpeciesInBirdDex(sp) {
     closeBtn.click();
     if (!sp) return;
 
     try {
-      // 1. Se siamo sulla home "Live", clicca prima il pulsante del tab "BirdDex"
+      // 1. Passa prima al tab BirdDex se siamo su Live
       const dexTabBtn = Array.from(document.querySelectorAll('button, [role="tab"]'))
         .find(b => b.textContent && b.textContent.trim().toLowerCase() === 'birddex');
       if (dexTabBtn) dexTabBtn.click();
 
-      // 2. Aspetta 120ms che il BirdDex sia visibile, poi apre la scheda
       setTimeout(() => {
         try {
-          if (typeof openDexModal === 'function') { openDexModal(sp.code); return; }
-          if (typeof openSpeciesModal === 'function') { openSpeciesModal(sp.code); return; }
-          if (typeof openSheet === 'function') { openSheet(sp.code); return; }
-          if (typeof openDexSheet === 'function') { openDexSheet(sp.code); return; }
-          if (typeof selectDexSpeciesAt === 'function' && typeof ALL_EMBEDDED_DEX !== 'undefined') {
-            const idx = ALL_EMBEDDED_DEX.findIndex(x => x.code === sp.code);
-            if (idx >= 0) { selectDexSpeciesAt(idx); return; }
-          }
-
-          // 3. Fallback: clicca direttamente la card della specie nel BirdDex
-          const card = document.querySelector(`[data-code="${sp.code}"], [data-dex-id="${sp.dexId}"]`);
-          if (card) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.click();
+          // 2. Chiama direttamente il wrapper di apertura o populateStickerSheet(sp, true)
+          if (typeof openStickerSheet === 'function') {
+            openStickerSheet(sp);
             return;
           }
-
-          // 4. Paracadute finale: scrive il nome nella barra di ricerca del BirdDex
-          const searchInput = document.querySelector('input[type="search"], input[placeholder*="Cerca"], #dexSearch');
-          if (searchInput) {
-            searchInput.value = sp.it || sp.sci;
-            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          if (typeof openSheet === 'function') {
+            openSheet(sp);
+            return;
+          }
+          if (typeof populateStickerSheet === 'function') {
+            populateStickerSheet(sp, true);
+            // Mostra il contenitore della scheda se era nascosto con classe 'hidden'
+            const entryBox = document.getElementById('sheetDexEntryBox');
+            const sheetModal = entryBox?.closest('.fixed, [id*="Sheet"], [id*="sheet"], [id*="Modal"]');
+            if (sheetModal) sheetModal.classList.remove('hidden');
+            return;
           }
         } catch (err) {
-          console.error('Errore apertura scheda BirdDex:', err);
+          console.error('Errore apertura scheda:', err);
         }
-      }, 120);
+      }, 100);
     } catch (err) {
-      console.error('Errore cambio tab BirdDex:', err);
+      console.error('Errore cambio tab:', err);
     }
   }
-
   async function startCamera() {
     stopCamera();
     preview.style.display = 'none';
