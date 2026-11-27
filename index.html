@@ -5495,6 +5495,61 @@ async function analyzeBirdImage(base64Jpeg) {
     });
   }
 })();
+// 1. Immagine leggera (480px) -> upload istantaneo
+  function resizeToBase64(source, maxSide = 480) {
+    const canvas = document.createElement('canvas');
+    const w = source.videoWidth || source.naturalWidth;
+    const h = source.videoHeight || source.naturalHeight;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+    return { dataUrl, base64: dataUrl.split(',')[1] };
+  }
+
+  function normStr(s) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  }
+
+  // 2. Ricerca istantanea nelle mappe native di WatchBirding (DEX_BY_SCI e ALL_EMBEDDED_DEX)
+  function findInBirdDex(scientificName, italianName) {
+    const targetSci = normStr(scientificName);
+    const targetBinomial = targetSci.split(/\s+/).slice(0, 2).join(' ');
+    const targetIt = normStr(italianName);
+
+    // Controllo diretto sulla Map DEX_BY_SCI
+    if (typeof DEX_BY_SCI !== 'undefined') {
+      if (DEX_BY_SCI.has(targetSci)) return DEX_BY_SCI.get(targetSci);
+      if (DEX_BY_SCI.has(targetBinomial)) return DEX_BY_SCI.get(targetBinomial);
+    }
+
+    // Ricerca nell'array completo delle 584 specie (ALL_EMBEDDED_DEX) o SPECIES_DB
+    const pool = (typeof ALL_EMBEDDED_DEX !== 'undefined' && ALL_EMBEDDED_DEX.length)
+      ? ALL_EMBEDDED_DEX
+      : (typeof SPECIES_DB !== 'undefined' ? SPECIES_DB : []);
+
+    return pool.find(s => {
+      const sSci = normStr(s.sci);
+      const sIt = normStr(s.it);
+      return (targetSci && sSci === targetSci) ||
+             (targetBinomial && sSci === targetBinomial) ||
+             (targetIt && sIt === targetIt);
+    }) || null;
+  }
+
+  // 3. Apertura diretta della scheda BirdDex
+  function openSpeciesInBirdDex(sp) {
+    closeBtn.click();
+    if (typeof openSheet === 'function') { openSheet(sp.code); return; }
+    if (typeof openDexSheet === 'function') { openDexSheet(sp.code); return; }
+    if (typeof selectDexSpeciesAt === 'function' && typeof ALL_EMBEDDED_DEX !== 'undefined') {
+      const idx = ALL_EMBEDDED_DEX.findIndex(x => x.code === sp.code);
+      if (idx >= 0) { selectDexSpeciesAt(idx); return; }
+    }
+    const card = document.querySelector(`[data-code="${sp.code}"]`);
+    if (card) card.click();
+  }
   </script>
   <script>
   if ('serviceWorker' in navigator) {
