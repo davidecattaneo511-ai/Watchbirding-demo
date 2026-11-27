@@ -5353,39 +5353,10 @@
 // Apre direttamente la scheda BirdDex nativa di WatchBirding
   function openSpeciesInBirdDex(sp) {
     closeBtn.click();
-    if (!sp) return;
+    if (!sp || !sp.code) return;
 
-    try {
-      // 1. Passa prima al tab BirdDex se siamo su Live
-      const dexTabBtn = Array.from(document.querySelectorAll('button, [role="tab"]'))
-        .find(b => b.textContent && b.textContent.trim().toLowerCase() === 'birddex');
-      if (dexTabBtn) dexTabBtn.click();
-
-      setTimeout(() => {
-        try {
-          // 2. Chiama direttamente il wrapper di apertura o populateStickerSheet(sp, true)
-          if (typeof openStickerSheet === 'function') {
-            openStickerSheet(sp);
-            return;
-          }
-          if (typeof openSheet === 'function') {
-            openSheet(sp);
-            return;
-          }
-          if (typeof populateStickerSheet === 'function') {
-            populateStickerSheet(sp, true);
-            // Mostra il contenitore della scheda se era nascosto con classe 'hidden'
-            const entryBox = document.getElementById('sheetDexEntryBox');
-            const sheetModal = entryBox?.closest('.fixed, [id*="Sheet"], [id*="sheet"], [id*="Modal"]');
-            if (sheetModal) sheetModal.classList.remove('hidden');
-            return;
-          }
-        } catch (err) {
-          console.error('Errore apertura scheda:', err);
-        }
-      }, 100);
-    } catch (err) {
-      console.error('Errore cambio tab:', err);
+    if (typeof openStickerSheet === 'function') {
+      openStickerSheet(sp.code, 'dex');
     }
   }
   async function startCamera() {
